@@ -1,0 +1,12 @@
+.pio/
+.vscode/
+.DS_Store
+data/
+# Built firmware artifacts — distributed via GitHub Releases, not in repo
+dist/
+*.bin
+# Python tooling
+__pycache__/
+*.pyc
+# Scratch screenshots
+docs/_*.png
