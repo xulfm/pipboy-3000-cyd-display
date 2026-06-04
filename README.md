@@ -137,14 +137,46 @@ wireless thermometer, a weather widget, and an NTP/mesh-synced clock.
 
 ---
 
+## Quick install (pre-built binary)
+
+If you just want to flash a CYD without setting up the build toolchain,
+grab the merged image for your panel from the
+**[latest release](https://github.com/jdperich/pipboy-3000-cyd-display/releases/latest)**.
+
+**Which one?** The ESP32-2432S028R ships with two different display
+controllers depending on the board revision:
+
+| Variant | Image | Typical board |
+| --- | --- | --- |
+| **ILI9341** | `pipboy-3000-cyd-ili9341-*.bin` | original / most common — single micro-USB port |
+| **ST7789** | `pipboy-3000-cyd-st7789-*.bin` | newer revisions — usually **USB-C + micro-USB ("2-USB")** |
+
+Not sure? Flash the ILI9341 image first (most boards). If the screen is
+blank, glitchy, or colour-inverted, flash the ST7789 image instead.
+
+Each image is a single merged binary (bootloader + partitions + app) —
+flash the whole thing to offset `0x0`, nothing else needed:
+
+```bash
+pip install esptool
+# replace COMx (Windows) / /dev/ttyUSB0 (Linux/macOS) with your port
+esptool.py --chip esp32 --port COMx write_flash 0x0 pipboy-3000-cyd-ili9341-v1.0.0.bin
+```
+
+First boot lands on the main menu; tap **LOGIN** to pick a dweller. Run the
+touch **CALIBRATE** app (in APPS) if taps feel off.
+
+---
+
 ## Build & flash
 
 Install [PlatformIO Core](https://docs.platformio.org/en/latest/core/installation/),
-then:
+then build the environment that matches your panel:
 
 ```bash
-pio run -e cyd -t upload          # build + flash over USB
-pio device monitor -e cyd         # serial console, 115200 baud
+pio run -e cyd         -t upload     # ILI9341 (most boards)
+pio run -e cyd_st7789  -t upload     # ST7789  (USB-C "2-USB" revisions)
+pio device monitor -e cyd            # serial console, 115200 baud
 ```
 
 On Windows the CYD's CH340 USB-UART usually shows up as `COM##` —
@@ -156,7 +188,15 @@ pio run -e cyd -t upload --upload-port COM12
 ```
 
 Everything is configured in [`platformio.ini`](platformio.ini) (TFT_eSPI
-pins, LVGL, NimBLE) — no manual `User_Setup.h` editing needed.
+pins, LVGL, NimBLE) — no manual `User_Setup.h` editing needed. The only
+difference between the two environments is the panel driver flag
+(`ILI9341_DRIVER` vs `ST7789_DRIVER` + `TFT_INVERSION_ON`).
+
+To regenerate the merged release binaries for both variants:
+
+```bash
+python tools/build_release.py --version v1.0.0   # -> dist/*.bin
+```
 
 ---
 
@@ -206,8 +246,10 @@ include/
 tools/
   snap.py             — pull one screenshot over USB
   capture.py          — interactive multi-screen capture walkthrough
+  build_release.py    — build both variants + merge flash-at-0x0 binaries
 docs/                 — README screenshots
-platformio.ini        — board, pins, libs, build flags
+dist/                 — merged release binaries (git-ignored; via Releases)
+platformio.ini        — two envs: cyd (ILI9341) + cyd_st7789 (ST7789)
 ```
 
 Re-theming is centralized: edit [`include/theme_config.h`](include/theme_config.h)
