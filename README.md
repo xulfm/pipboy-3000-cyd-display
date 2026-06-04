@@ -89,9 +89,12 @@ device share time/weather with the offline ones.
 
 <table>
   <tr>
-    <td align="center" width="33%"><img src="docs/radio.png" width="220"><br><sub><b>RADIO</b><br>peers + chat</sub></td>
-    <td align="center" width="33%"><img src="docs/blackjack_menu.png" width="220"><br><sub><b>blackjack</b><br>1P or mesh</sub></td>
-    <td align="center" width="33%"><img src="docs/blackjack_lobby.png" width="220"><br><sub><b>mesh lobby</b><br>up to 6 seats</sub></td>
+    <td align="center" width="50%"><img src="docs/radio.png" width="240"><br><sub><b>RADIO</b> — live peers (signal bars) + group/DM chat</sub></td>
+    <td align="center" width="50%"><img src="docs/invite.png" width="240"><br><sub><b>incoming invite</b> — another PIP-BOY opened a table</sub></td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><img src="docs/blackjack_menu.png" width="240"><br><sub><b>blackjack</b> — 1-player or mesh host</sub></td>
+    <td align="center" width="50%"><img src="docs/blackjack_lobby.png" width="240"><br><sub><b>mesh lobby</b> — host waits for up to 6 seats</sub></td>
   </tr>
 </table>
 
