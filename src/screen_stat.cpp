@@ -1,7 +1,7 @@
 // ============================================================
 // Vault 89 PDI-Boy -- STAT Screen
 // Left panel: Vault dweller figure, name/title, HP/MORALE, VAULT 89
-// Right panel: P.D.I. STATS grid, STATUS bars, TRADE PERKS, effects
+// Right panel: dweller stats grid, STATUS bars, TRADE PERKS, effects
 // ============================================================
 
 #include <Arduino.h>
@@ -1052,8 +1052,8 @@ lv_obj_t* screen_stat_create(void) {
     lv_obj_set_style_radius(right, 0, 0);
     lv_obj_clear_flag(right, LV_OBJ_FLAG_SCROLLABLE);
 
-    // Section: P.D.I. STATS
-    make_sec_label(right, "P.D.I. STATS", 0, 0, 219);
+    // Section: dweller aptitude scores
+    make_sec_label(right, "DWELLER STATS", 0, 0, 219);
 
     const char* stat_names[] = {"SAF","PRC","EFF","CRF","INN","ADP","LDR"};
     uint8_t stat_vals[] = {d.saf, d.prc, d.eff, d.crf, d.inn, d.adp, d.ldr};

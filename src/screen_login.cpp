@@ -134,9 +134,6 @@ static void refresh_availability(bool allow_auto_select = true) {
 // Teardown the login screen's timers/pointers, then hand off to the
 // app. Called after the name-entry step is confirmed/skipped.
 static void finish_login(void) {
-    Serial.printf("[login] finish_login idx=%d name='%s' heap=%u\n",
-                  login_sel, user_display_name(),
-                  (unsigned)ESP.getFreeHeap());
     if (wifi_timer) { lv_timer_del(wifi_timer); wifi_timer = NULL; }
     // Free the full-screen keyboard overlay NOW — before on_login_complete
     // builds the (memory-heavy) tab bar + STAT screen. Holding the overlay
@@ -148,7 +145,6 @@ static void finish_login(void) {
     footer_msg = NULL;
     login_list = NULL;
     for (int i = 0; i < TEAM_COUNT; i++) { tag_labels[i] = NULL; row_objs[i] = NULL; }
-    Serial.printf("[login] overlay freed, heap=%u\n", (unsigned)ESP.getFreeHeap());
     on_login_complete(login_sel);
 }
 
@@ -197,7 +193,6 @@ static void name_kb_cb(lv_event_t* e) {
     uint32_t id = lv_btnmatrix_get_selected_btn(btnm);
     const char* txt = lv_btnmatrix_get_btn_text(btnm, id);
     if (!txt) return;
-    Serial.printf("[login] kb key='%s'\n", txt);
     if      (strcmp(txt, "DEL")   == 0) lv_textarea_del_char(s_name_ta);
     else if (strcmp(txt, "SPACE") == 0) lv_textarea_add_char(s_name_ta, ' ');
     else if (strcmp(txt, "OK")    == 0) name_confirm();
@@ -207,7 +202,6 @@ static void name_kb_cb(lv_event_t* e) {
 // Open the name-entry overlay, prefilled with the selected archetype's
 // name. The user can keep it or type their own.
 static void open_name_entry(void) {
-    Serial.println("[login] open_name_entry");
     s_name_overlay = lv_obj_create(lv_scr_act());
     lv_obj_set_size(s_name_overlay, 320, 240);
     lv_obj_set_pos(s_name_overlay, 0, 0);
@@ -260,7 +254,6 @@ static void open_name_entry(void) {
     lv_obj_set_style_border_width(kb, 1, LV_PART_ITEMS);
     lv_obj_set_style_radius(kb, 2, LV_PART_ITEMS);
     lv_obj_add_event_cb(kb, name_kb_cb, LV_EVENT_VALUE_CHANGED, NULL);
-    Serial.println("[login] open_name_entry done");
 }
 
 static void enter_vault_cb(lv_event_t* e) {
@@ -453,4 +446,12 @@ lv_obj_t* screen_login_create(void) {
     lv_obj_align(btn_lbl, LV_ALIGN_CENTER, 0, 0);
 
     return scr;
+}
+
+// Docs/automation hook: select the first dweller and open the name-entry
+// keyboard overlay (for a screenshot of the keyboard). Call while the
+// login screen is the active screen.
+void screen_login_demo_name_entry(void) {
+    login_sel = 0;
+    open_name_entry();
 }

@@ -459,9 +459,14 @@ static void rebuild_panel(void) {
     }
 }
 
+// Docs/automation hook: set before screen_settings_create() to open
+// directly on a given panel (e.g. PANEL_ANCHOR). Reset to MAIN after use.
+int g_settings_open_panel = PANEL_MAIN;
+
 // ── Screen create ──
 lv_obj_t* screen_settings_create(void) {
-    s_panel = PANEL_MAIN;
+    s_panel = (SettingsPanel)g_settings_open_panel;
+    g_settings_open_panel = PANEL_MAIN;   // one-shot
 
     lv_obj_t* scr = lv_obj_create(NULL);
     lv_obj_set_style_bg_color(scr, CLR_BG, 0);
@@ -499,7 +504,7 @@ lv_obj_t* screen_settings_create(void) {
     lv_obj_set_style_pad_all(s_content, 0, 0);
     lv_obj_clear_flag(s_content, LV_OBJ_FLAG_SCROLLABLE);
 
-    build_main_panel(s_content);
+    rebuild_panel();   // builds whichever panel s_panel selects
 
     // Teardown on delete
     lv_obj_add_event_cb(scr, [](lv_event_t* e) {

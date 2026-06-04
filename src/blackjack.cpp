@@ -1348,3 +1348,23 @@ static const GameModule s_bj_module = {
 void blackjack_init(void) {
     game_register(&s_bj_module);
 }
+
+// Docs/automation hook: open the 1-player table and deal a hand so a
+// screenshot shows an actual game in progress (not the empty table).
+void blackjack_open_1p_demo(void) {
+    apps_swap_sub_scr(screen_blackjack_game_create(BJ_MODE_1P));
+    bj1_shuffle();
+    bj1_deal();
+    bj_render();
+}
+
+// Docs/automation hook: open the mesh host lobby (broadcasts an invite,
+// then shows the WAITING-FOR-PLAYERS lobby) for a multiplayer screenshot.
+extern bool g_logged_in;
+void blackjack_open_host_lobby(void) {
+    // Ensure we have a host identity so the lobby shows a name, not "?".
+    g_dweller_idx = 0;
+    g_logged_in   = true;
+    game_host_invite(GAME_BLACKJACK, 2, 6);
+    apps_swap_sub_scr(screen_blackjack_lobby_create(true));
+}

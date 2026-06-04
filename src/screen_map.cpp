@@ -369,6 +369,17 @@ static void radar_close_cb(lv_event_t* e) {
     }
 }
 
+// Docs/automation hook: open the radar overlay on the current MAP screen
+// (no-op if the map isn't built). Lets the screenshot tool capture the
+// radar without a touch.
+void screen_map_force_radar(void) {
+    if (!radar_cont || radar_visible) return;
+    radar_visible = true;
+    lv_obj_clear_flag(radar_cont, LV_OBJ_FLAG_HIDDEN);
+    if (!radar_timer) radar_timer = lv_timer_create(radar_timer_cb, 100, NULL);
+    update_radar();
+}
+
 // ── Build radar overlay ──
 static void build_radar(lv_obj_t* parent) {
     radar_cont = lv_obj_create(parent);
@@ -583,8 +594,9 @@ lv_obj_t* screen_map_create(void) {
     box(map, "RED ROCKET", 6, 60, 80, 16, CLR_YELLOW);
 
     // ── VAULT entrance (center / radar home) ──
-    box(map, VAULT_ID, 132, 60, 56, 30, CLR_GOLD);
-    lbl(map, "HOME", 146, 92, CLR_GOLD);
+    // Box centered on MAP_STAGE_X (160); wide enough for "VAULT 111".
+    box(map, VAULT_ID, 120, 60, 80, 28, CLR_GOLD);
+    lbl(map, "HOME", 146, 90, CLR_GOLD);
 
     // ── Trade + tech (east) ──
     box(map, "TRADE POST", 226, 30, 84, 16, CLR_GREEN);

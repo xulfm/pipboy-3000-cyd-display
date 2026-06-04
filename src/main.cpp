@@ -488,33 +488,45 @@ void build_tab_bar(void) {
     batt_timer_cb(NULL);
 }
 
+static lv_obj_t* create_tab_screen(int idx) {
+    switch (idx) {
+        case 0: return screen_stat_create();
+        case 1: return screen_inv_create();
+        case 2: return screen_data_create();
+        case 3: return screen_map_create();
+        case 4: return screen_radio_create();
+    }
+    return NULL;
+}
+
 void switch_tab(int idx) {
     if (idx == g_active_tab && g_screens[idx] != NULL) return;
 
-    // Create the new screen first
-    lv_obj_t* new_scr = NULL;
-    switch (idx) {
-        case 0: new_scr = screen_stat_create();  break;
-        case 1: new_scr = screen_inv_create();   break;
-        case 2: new_scr = screen_data_create();  break;
-        case 3: new_scr = screen_map_create();   break;
-        case 4: new_scr = screen_radio_create(); break;
-    }
-    if (!new_scr) return;
-
-    // Delete old screen to free memory (only one screen at a time)
+    // Free the OUTGOING screen before building the new one. These screens
+    // are object-heavy and this board has only ~90 KB free heap with no
+    // PSRAM — holding two at once (build-new-then-free-old) peaks over the
+    // limit and reboots the device on heavier transitions (e.g. STAT->INV).
+    // LVGL can't delete the active screen, so bridge through a cheap blank
+    // screen first (same pattern as teardown_tabs).
     if (g_active_tab >= 0 && g_screens[g_active_tab] != NULL) {
-        lv_obj_t* old_scr = g_screens[g_active_tab];
+        lv_obj_t* blank = lv_obj_create(NULL);
+        lv_obj_set_style_bg_color(blank, CLR_BG, 0);
+        lv_obj_set_style_bg_opa(blank, LV_OPA_COVER, 0);
+        lv_scr_load(blank);                       // active screen is now cheap
+        lv_obj_del(g_screens[g_active_tab]);      // free the heavy outgoing one
         g_screens[g_active_tab] = NULL;
-        // Load new screen first, then delete old
+
+        lv_obj_t* new_scr = create_tab_screen(idx);
+        if (!new_scr) { update_tab_bar(g_active_tab); return; }
         g_screens[idx] = new_scr;
-        g_active_tab = idx;
+        g_active_tab   = idx;
         lv_scr_load(new_scr);
-        // Defer delete to allow LVGL to finish with old screen
-        lv_obj_del_async(old_scr);
+        lv_obj_del(blank);
     } else {
+        lv_obj_t* new_scr = create_tab_screen(idx);
+        if (!new_scr) return;
         g_screens[idx] = new_scr;
-        g_active_tab = idx;
+        g_active_tab   = idx;
         lv_scr_load(new_scr);
     }
     update_tab_bar(idx);
@@ -1281,15 +1293,67 @@ static void cmd_screenshot(void) {
     Serial.println("SCR-END");
 }
 
+// Serial-driven navigation (for docs/automation). Maps short commands to
+// the same nav functions the touch UI uses, so the screenshot tool can
+// drive the device to any screen and snap it without a human tapping.
+// Hooks for screens behind internal overlays:
+extern void blackjack_open_1p_demo(void);
+extern void blackjack_open_host_lobby(void);
+extern void screen_map_force_radar(void);
+extern void screen_login_demo_name_entry(void);
+extern int  g_settings_open_panel;   // 3 == PANEL_ANCHOR
+
+static void nav_serial_command(const char* c) {
+    Serial.printf("[nav] serial cmd: %s\n", c);
+    // --- apps / sub-screen mode ---
+    if      (!strcmp(c, "apps"))        menu_nav_apps();
+    else if (!strcmp(c, "hub"))         apps_open_hub();
+    else if (!strcmp(c, "blackjackmenu")) apps_swap_sub_scr(screen_blackjack_menu_create());
+    else if (!strcmp(c, "blackjack1p")) blackjack_open_1p_demo();
+    else if (!strcmp(c, "blackjackhost")) blackjack_open_host_lobby();
+    else if (!strcmp(c, "pomodoro"))    apps_open_pomodoro();
+    else if (!strcmp(c, "stopwatch"))   apps_open_stopwatch();
+    else if (!strcmp(c, "ping"))        apps_open_ping();
+    else if (!strcmp(c, "status"))      apps_open_presence();
+    else if (!strcmp(c, "soundboard"))  apps_open_soundboard();
+    else if (!strcmp(c, "holotape"))    apps_open_holotape();
+    else if (!strcmp(c, "dice"))        apps_open_dice();
+    else if (!strcmp(c, "snake"))       apps_open_snake();
+    else if (!strcmp(c, "radstats"))    apps_open_radstats();
+    else if (!strcmp(c, "pager"))       apps_open_pager();
+    else if (!strcmp(c, "quests"))      apps_open_quests();
+    else if (!strcmp(c, "settings"))    apps_swap_sub_scr(screen_settings_create());
+    else if (!strcmp(c, "anchor"))    { g_settings_open_panel = 3; apps_swap_sub_scr(screen_settings_create()); }
+    else if (!strcmp(c, "clock"))       apps_swap_sub_scr(screen_clock_create());
+    else if (!strcmp(c, "menu"))        apps_nav_back();
+    // --- login + tabbed dweller UI ---
+    else if (!strcmp(c, "login"))       menu_nav_login();
+    else if (!strcmp(c, "nameentry"))   screen_login_demo_name_entry();
+    else if (!strcmp(c, "autologin"))   on_login_complete(0);
+    else if (!strcmp(c, "stat"))        switch_tab(0);
+    else if (!strcmp(c, "inv"))         switch_tab(1);
+    else if (!strcmp(c, "data"))        switch_tab(2);
+    else if (!strcmp(c, "map"))         switch_tab(3);
+    else if (!strcmp(c, "radio"))       switch_tab(4);
+    else if (!strcmp(c, "radar"))     { switch_tab(3); screen_map_force_radar(); }
+    // --- misc ---
+    else if (!strcmp(c, "reset"))       ESP.restart();
+    else Serial.printf("[nav] unknown cmd: %s\n", c);
+}
+
 static void screenshot_serial_poll(void) {
-    static char    line[40];
+    static char    line[48];
     static uint8_t n = 0;
     while (Serial.available()) {
         char c = (char)Serial.read();
         if (c == '\n' || c == '\r') {
             line[n] = 0;
-            if (n && (strstr(line, "SNAP") || strstr(line, "screenshot")))
-                cmd_screenshot();
+            if (n) {
+                if (strstr(line, "SNAP") || strstr(line, "screenshot"))
+                    cmd_screenshot();
+                else if (strncmp(line, "NAV ", 4) == 0)
+                    nav_serial_command(line + 4);
+            }
             n = 0;
         } else if (n < sizeof(line) - 1) {
             line[n++] = c;
