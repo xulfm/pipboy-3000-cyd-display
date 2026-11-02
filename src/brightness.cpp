@@ -22,7 +22,12 @@ static uint8_t s_bright_hour = 7;   // 7am
 #define BL_NIGHT_LEVEL_DEFAULT 16      // very dim at night
 #endif
 static uint8_t s_night_level = BL_NIGHT_LEVEL_DEFAULT;
-static bool    s_quiet_dim   = true;
+// Mute sound effects during night mode? Boards can override the default
+// from platformio.ini with -DBL_QUIET_DEFAULT=0.
+#ifndef BL_QUIET_DEFAULT
+#define BL_QUIET_DEFAULT 1
+#endif
+static bool    s_quiet_dim   = BL_QUIET_DEFAULT;
 
 static bool    s_is_night    = false;
 static bool    s_inited      = false;
@@ -61,7 +66,7 @@ void brightness_init(void) {
         s_dim_hour    = p.getUChar("dim_h",  18);
         s_bright_hour = p.getUChar("brt_h",  7);
         s_night_level = p.getUChar("n_lvl",  BL_NIGHT_LEVEL_DEFAULT);
-        s_quiet_dim   = p.getBool("quiet",   true);
+        s_quiet_dim   = p.getBool("quiet",   BL_QUIET_DEFAULT);
         p.end();
     }
     if (s_dim_hour    > 23) s_dim_hour    = 18;

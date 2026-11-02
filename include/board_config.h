@@ -15,7 +15,8 @@
   #define BOARD_LABEL       "ESP32-S3"
   #define LCD_BL_PIN        41      // backlight (PWM)
   #define BATT_ADC_PIN      8       // battery sense, 100K/100K divider
-  #define BOARD_HAS_BUZZER  0       // audio is an ES8311 codec — not wired up yet
+  #define BOARD_HAS_BUZZER  0
+  #define BOARD_HAS_I2S_AUDIO 1     // ES8311 codec + speaker (src/fn35_audio.cpp)
 #else
   // Classic CYD (ESP32-2432S028R)
   #define BOARD_CYD         1
@@ -23,4 +24,5 @@
   #define LCD_BL_PIN        21
   #define BATT_ADC_PIN      34
   #define BOARD_HAS_BUZZER  1       // LEDC tone on GPIO 26, amp enable GPIO 4
+  #define BOARD_HAS_I2S_AUDIO 0
 #endif

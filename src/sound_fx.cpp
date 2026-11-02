@@ -10,9 +10,12 @@
 #include "brightness.h"
 #include "board_config.h"
 
-// Boards without the CYD buzzer (e.g. the Freenove ESP32-S3, whose audio
-// goes through an ES8311 codec) keep the whole sound API but make no noise.
-// On the S3, GPIO 26 belongs to the PSRAM, so it must never be driven.
+// Boards without the CYD buzzer don't touch its pins at all (on the S3,
+// GPIO 26 belongs to the PSRAM). The Freenove board plays the same tones
+// through its ES8311 codec and speaker instead — see fn35_audio.cpp.
+#if BOARD_HAS_I2S_AUDIO
+  #include "fn35_audio.h"
+#endif
 #if !BOARD_HAS_BUZZER
   #define pinMode(p, m)            ((void)0)
   #define digitalWrite(p, v)       ((void)0)
@@ -111,8 +114,13 @@ static void update_duty(void) {
 
 // ── Amp + LEDC control ──
 
+static uint16_t s_cur_freq = 0;   // tone currently sounding (for live volume changes)
+
 static void amp_on(void) {
     if (!s_amp_on) {
+#if BOARD_HAS_I2S_AUDIO
+        fn35_audio_amp(true);
+#endif
         digitalWrite(SFX_AMP_PIN, LOW);  // ACTIVE LOW
         s_amp_on = true;
     }
@@ -120,12 +128,19 @@ static void amp_on(void) {
 
 static void amp_off(void) {
     if (s_amp_on) {
+#if BOARD_HAS_I2S_AUDIO
+        fn35_audio_amp(false);
+#endif
         digitalWrite(SFX_AMP_PIN, HIGH);
         s_amp_on = false;
     }
 }
 
 static void ledc_start(uint16_t freq) {
+    s_cur_freq = freq;
+#if BOARD_HAS_I2S_AUDIO
+    fn35_audio_tone(freq, s_volume);
+#endif
     if (!s_attached) {
         ledcSetup(SFX_LEDC_CH, freq, 8);  // 8-bit resolution
         ledcAttachPin(SFX_PIN, SFX_LEDC_CH);
@@ -137,6 +152,10 @@ static void ledc_start(uint16_t freq) {
 }
 
 static void ledc_silence(void) {
+    s_cur_freq = 0;
+#if BOARD_HAS_I2S_AUDIO
+    fn35_audio_tone(0, s_volume);
+#endif
     if (s_attached) {
         ledcWrite(SFX_LEDC_CH, 0);  // 0 duty = silence, pin stays attached
     }
@@ -180,6 +199,9 @@ void sfx_init(void) {
         if (s_click_tone >= CLICK_TONE_COUNT) s_click_tone = 0;
     }
     update_duty();
+#if BOARD_HAS_I2S_AUDIO
+    if (!fn35_audio_init()) Serial.println("[sfx] speaker init failed - sounds disabled");
+#endif
     // Pre-attach LEDC so first sound plays instantly
     ledcSetup(SFX_LEDC_CH, 1000, 8);
     ledcAttachPin(SFX_PIN, SFX_LEDC_CH);
@@ -196,6 +218,9 @@ void sfx_set_volume(uint8_t vol) {
     // Update live if currently playing
     if (s_playing && s_attached) {
         ledcWrite(SFX_LEDC_CH, s_duty);
+#if BOARD_HAS_I2S_AUDIO
+        fn35_audio_tone(s_cur_freq, s_volume);
+#endif
     }
     // Persist (best-effort; Preferences is safe from any context)
     Preferences p;
