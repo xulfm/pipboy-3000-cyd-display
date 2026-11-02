@@ -16,7 +16,12 @@
 // Defaults. Editable from Settings, persisted in the "bl" namespace.
 static uint8_t s_dim_hour    = 18;  // 6pm
 static uint8_t s_bright_hour = 7;   // 7am
-static uint8_t s_night_level = 16;  // very dim at night
+// Night-time brightness cap (0-255). Boards can override the default
+// from platformio.ini, e.g. -DBL_NIGHT_LEVEL_DEFAULT=153 for ~60%.
+#ifndef BL_NIGHT_LEVEL_DEFAULT
+#define BL_NIGHT_LEVEL_DEFAULT 16      // very dim at night
+#endif
+static uint8_t s_night_level = BL_NIGHT_LEVEL_DEFAULT;
 static bool    s_quiet_dim   = true;
 
 static bool    s_is_night    = false;
@@ -55,7 +60,7 @@ void brightness_init(void) {
     if (p.begin("bl", true)) {
         s_dim_hour    = p.getUChar("dim_h",  18);
         s_bright_hour = p.getUChar("brt_h",  7);
-        s_night_level = p.getUChar("n_lvl",  16);
+        s_night_level = p.getUChar("n_lvl",  BL_NIGHT_LEVEL_DEFAULT);
         s_quiet_dim   = p.getBool("quiet",   true);
         p.end();
     }

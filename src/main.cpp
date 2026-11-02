@@ -1,7 +1,12 @@
 #include <Arduino.h>
 #include <SPI.h>
+#include "board_config.h"
+#if defined(BOARD_FREENOVE35)
+#include "freenove35_display.h"
+#else
 #include <TFT_eSPI.h>
 #include <XPT2046_Touchscreen.h>
+#endif
 #include <lvgl.h>
 #include <WiFi.h>
 #include <esp_sleep.h>
@@ -224,7 +229,7 @@ void apps_open_calibrate(void);
 int g_dweller_idx = 0;
 
 // ── Battery monitoring ──
-#define BATT_ADC_PIN  34          // CYD battery voltage divider pin
+// BATT_ADC_PIN comes from board_config.h (100K/100K divider on both boards)
 #define BATT_SAMPLES   8          // average N readings
 static lv_obj_t* batt_pct_lbl  = NULL;
 static lv_obj_t* batt_body     = NULL;
@@ -292,11 +297,13 @@ static void batt_timer_cb(lv_timer_t* t) {
 }
 
 
+#if !defined(BOARD_FREENOVE35)
 SPIClass touchSPI(VSPI);
 #define TOUCH_CS   33
 #define TOUCH_IRQ  36
-#define LCD_BL_PIN 21
-#define SLEEP_BTN  0            // BOOT button (GPIO 0)
+#endif
+// LCD_BL_PIN comes from board_config.h
+#define SLEEP_BTN  0            // BOOT button (GPIO 0) on both boards
 
 // ── Backlight PWM + auto-dim ──
 #define BL_PWM_CHANNEL  0
@@ -318,8 +325,10 @@ static void set_backlight(uint8_t level) {
     ledcWrite(BL_PWM_CHANNEL, level);
 }
 
+#if !defined(BOARD_FREENOVE35)
 TFT_eSPI            tft;
 XPT2046_Touchscreen touch(TOUCH_CS, TOUCH_IRQ);
+#endif
 
 static const uint16_t SCREEN_W  = 320;
 static const uint16_t SCREEN_H  = 240;
@@ -362,13 +371,59 @@ static void screenshot_dump_region(const lv_area_t* area, lv_color_t* color_p);
 void lv_flush_cb(lv_disp_drv_t* drv, const lv_area_t* area, lv_color_t* color_p) {
     uint32_t w = area->x2 - area->x1 + 1;
     uint32_t h = area->y2 - area->y1 + 1;
+#if defined(BOARD_FREENOVE35)
+    (void)w; (void)h;
+    fn35_flush(area, color_p);   // scales the 320x240 UI up to the 480x320 panel
+#else
     tft.startWrite();
     tft.setAddrWindow(area->x1, area->y1, w, h);
     tft.pushColors((uint16_t*)color_p, w * h, true);
     tft.endWrite();
+#endif
     if (g_screenshot_capturing) screenshot_dump_region(area, color_p);
     lv_disp_flush_ready(drv);
 }
+
+#if defined(BOARD_FREENOVE35) && FN35_TOUCH_DEBUG
+// On-screen touch diagnostics: a status line at the bottom and a red dot
+// that follows your finger. Turn off with -DFN35_TOUCH_DEBUG=0.
+static lv_obj_t* s_tdbg_lbl = NULL;
+static lv_obj_t* s_tdbg_dot = NULL;
+static void tdbg_timer_cb(lv_timer_t* t) {
+    (void)t;
+    char line[96];
+    fn35_touch_status(line, sizeof(line));
+    lv_label_set_text(s_tdbg_lbl, line);
+    if (g_touch_pressed) {
+        lv_obj_set_pos(s_tdbg_dot, g_touch_x - 3, g_touch_y - 3);
+        lv_obj_clear_flag(s_tdbg_dot, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(s_tdbg_dot, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+static void tdbg_create(void) {
+    s_tdbg_lbl = lv_label_create(lv_layer_sys());   // sys layer: the app never clears it
+    lv_obj_set_width(s_tdbg_lbl, SCREEN_W);
+    lv_label_set_long_mode(s_tdbg_lbl, LV_LABEL_LONG_CLIP);
+    lv_obj_set_style_text_font(s_tdbg_lbl, &lv_font_unscii_8, 0);
+    lv_obj_set_style_text_color(s_tdbg_lbl, lv_color_hex(0xFFD000), 0);
+    lv_obj_set_style_bg_color(s_tdbg_lbl, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(s_tdbg_lbl, LV_OPA_COVER, 0);
+    lv_obj_align(s_tdbg_lbl, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+    lv_label_set_text(s_tdbg_lbl, "TOUCH: starting");
+
+    s_tdbg_dot = lv_obj_create(lv_layer_sys());
+    lv_obj_set_size(s_tdbg_dot, 7, 7);
+    lv_obj_set_style_radius(s_tdbg_dot, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(s_tdbg_dot, lv_color_hex(0xFF0000), 0);
+    lv_obj_set_style_bg_opa(s_tdbg_dot, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(s_tdbg_dot, 0, 0);
+    lv_obj_clear_flag(s_tdbg_dot, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(s_tdbg_dot, LV_OBJ_FLAG_HIDDEN);
+
+    lv_timer_create(tdbg_timer_cb, 100, NULL);
+}
+#endif
 
 void lv_touch_cb(lv_indev_drv_t* drv, lv_indev_data_t* data) {
     if (g_touch_pressed) {
@@ -1063,12 +1118,28 @@ static unsigned long last_tap_ms = 0;
 static bool g_was_pressed = false;
 
 void poll_touch(void) {
+    bool pressed = false;
+#if defined(BOARD_FREENOVE35)
+    // Capacitive touch: already in 320x240 UI coordinates, no calibration needed
+    int tx = 0, ty = 0;
+    if (fn35_touch_read(&tx, &ty)) {
+        g_touch_raw_x = tx;
+        g_touch_raw_y = ty;
+        g_touch_x = tx;
+        g_touch_y = ty;
+        pressed = true;
+    }
+#else
     if (touch.tirqTouched() && touch.touched()) {
         TS_Point p = touch.getPoint();
         g_touch_raw_x = p.x;
         g_touch_raw_y = p.y;
         g_touch_x = constrain(map(p.x, TOUCH_MIN_X, TOUCH_MAX_X, 0, SCREEN_W - 1), 0, SCREEN_W - 1);
         g_touch_y = constrain(map(p.y, TOUCH_MIN_Y, TOUCH_MAX_Y, 0, SCREEN_H - 1), 0, SCREEN_H - 1);
+        pressed = true;
+    }
+#endif
+    if (pressed) {
         g_touch_pressed = true;
         last_touch_ms = millis();
         if (bl_dimmed) {
@@ -1200,14 +1271,19 @@ void setup() {
     blackjack_init();
     touch_load_cal();
 
+#if defined(BOARD_FREENOVE35)
+    // Panel + touch. Orientation is FN35_ROTATION in platformio.ini.
+    fn35_init();
+#else
     tft.init();
     tft.fillScreen(TFT_BLACK);
-    tft.setRotation(3);  // 180° flip for case with USB on opposite side
+    tft.setRotation(1);  // flipped 180° from original (was 3)
     tft.fillScreen(TFT_BLACK);
 
     touchSPI.begin(25, 39, 32, TOUCH_CS);
     touch.begin(touchSPI);
-    touch.setRotation(3);  // match display rotation
+    touch.setRotation(1);  // match display rotation
+#endif
 
     lv_init();
 
@@ -1225,6 +1301,10 @@ void setup() {
     indev_drv.type    = LV_INDEV_TYPE_POINTER;
     indev_drv.read_cb = lv_touch_cb;
     lv_indev_drv_register(&indev_drv);
+
+#if defined(BOARD_FREENOVE35) && FN35_TOUCH_DEBUG
+    tdbg_create();
+#endif
 
     net_init_deferred();  // init WS/ESP-NOW subsystems but skip WiFi.begin
 

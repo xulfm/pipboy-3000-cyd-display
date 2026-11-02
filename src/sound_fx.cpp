@@ -8,6 +8,19 @@
 #include <Preferences.h>
 #include "sound_fx.h"
 #include "brightness.h"
+#include "board_config.h"
+
+// Boards without the CYD buzzer (e.g. the Freenove ESP32-S3, whose audio
+// goes through an ES8311 codec) keep the whole sound API but make no noise.
+// On the S3, GPIO 26 belongs to the PSRAM, so it must never be driven.
+#if !BOARD_HAS_BUZZER
+  #define pinMode(p, m)            ((void)0)
+  #define digitalWrite(p, v)       ((void)0)
+  #define ledcSetup(c, f, r)       ((void)0)
+  #define ledcAttachPin(p, c)      ((void)0)
+  #define ledcWrite(c, d)          ((void)0)
+  #define ledcWriteTone(c, f)      ((void)0)
+#endif
 
 #define SFX_PIN       26
 #define SFX_AMP_PIN   4
